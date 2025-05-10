@@ -1,0 +1,85 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+    var hostAddress = Request.Host.Value; // Set the value in Razor
+}
+
+<div class="chat-container">
+    <div class="chat-header">Custom ChatGPT <span id="connectionId"></span></div>
+    <div class="chat-box" id="chat-box"></div>
+    <div class="chat-input">
+        <input type="text" id="user-input" placeholder="Write your message...">
+        <button onclick="sendPrompt()" id="sendButton">Send</button>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+
+        // Pass the Razor variable to JavaScript
+        var hostAddress = "@hostAddress";
+        var sendButton = document.getElementById("sendButton");
+        var messageBoxId = "";
+        var message="";
+        var hubConnection = new signalR.HubConnectionBuilder()
+            .withUrl(`https://${hostAddress}/ai`)
+            .build();
+
+        hubConnection.start()
+            .then(() =>
+                document.getElementById("connectionId").innerHTML = `(${hubConnection.connectionId})`)
+            .catch(err =>
+                console.error(err.toString()));
+
+        hubConnection.on("ReceiveMessage", responseMessage => {
+            message+=responseMessage;
+             var converter = new showdown.Converter(), html = converter.makeHtml(message);
+            document.getElementById(messageBoxId).innerHTML = html;
+             chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        const input = document.getElementById("user-input");
+        const chatBox = document.getElementById("chat-box");
+
+        function sendPrompt() {
+            if (input.value.trim() === "") return;
+            sendButton.innerText = "Sending...";
+            sendButton.setAttribute("disabled", "disabled");
+            sendButton.classList.add("disabled");
+            const userMessage = `<div><strong>You:</strong> ${input.value}</div>`;
+            chatBox.innerHTML += userMessage;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            fetch(`https://${hostAddress}/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ prompt: input.value, connectionId: hubConnection.connectionId })
+            })
+            .then(response => response.text())
+            .then(data => {
+                message = "";
+                messageBoxId = "";
+                sendButton.innerText = "Send";
+                sendButton.removeAttribute("disabled");
+                sendButton.classList.remove("disabled");
+            })
+            .catch(error => console.error("Error", error));
+
+            input.value = "";
+            var id = uuidv4();
+            var box = document.createElement("div");
+            box.id = id;
+            messageBoxId = id;
+            chatBox.appendChild(box);
+        }
+
+         function uuidv4() {
+           return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+             (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)
+           );
+         }
+    </script>
+}
